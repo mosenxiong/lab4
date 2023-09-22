@@ -17,6 +17,7 @@ When you click the **Render** button a document will be generated that includes 
 library(data.table)
 library(leaflet)
 library(tidyverse)
+library(R.utils)
 ```
 
 # 1.
