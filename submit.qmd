@@ -1,6 +1,6 @@
 ---
-title: ""
-author: ""
+title: "lab4"
+author: "Senxiong MO"
 format:
   html:
     embed-resources: true
@@ -13,16 +13,100 @@ Quarto enables you to weave together content and executable code into a finished
 ## Running Code
 
 When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
-
 ```{r}
-1 + 1
+library(data.table)
+library(leaflet)
+library(tidyverse)
 ```
 
-You can add options to executable code like this
-
+# 1.
 ```{r}
-#| echo: false
-2 * 2
+if (!file.exists("met_all.gz"))
+  download.file(
+    url = "https://raw.githubusercontent.com/USCbiostats/data-science-data/master/02_met/met_all.gz",
+    destfile = "met_all.gz",
+    method   = "libcurl",
+    timeout  = 60
+    )
+met <- data.table::fread("met_all.gz")
+```
+# 2.
+```{r}
+met<- met[met$temp>=-17][elev == 9999.0, elev := NA]
+
+met[, week := week(as.Date(paste(year, month, day, sep = "-")))]
+met<-met[week == min(week, na.rm = TRUE)]
+
+average_met<-met[,.(temp=mean(temp,na.rm=TRUE), rh=mean(rh,na.rm=TRUE), wind.sp=mean(wind.sp,na.rm=TRUE), vis.dist=mean(vis.dist,na.rm=TRUE), dew.point = mean(dew.point, na.rm=TRUE), lat=mean(lat), lon=mean(lon), elev=mean(elev,na.rm=TRUE)), by="USAFID"]
+
+average_met$region <- ifelse(average_met$lon > -98 & average_met$lat >39.71, "NE", ifelse(average_met$lon > -98 & average_met$lat < 39.71, "SE", ifelse(average_met$lon < -98 & average_met$lat >39.71, "NW","SW")))
+
+table(average_met$region)
 ```
 
-The `echo: false` option disables the printing of code (only output is displayed).
+# 3.
+```{r}
+average_met%>%
+  filter(!(region %in% NA)) %>%
+ggplot()+geom_violin(mapping = aes(y=wind.sp, x=1)) +facet_wrap(~region, nrow=3)
+
+average_met%>%
+  filter(!(region %in% NA)) %>%
+ggplot()+geom_boxplot(mapping = aes(y=dew.point, fill=region)) +facet_wrap(~region, nrow=1)
+```
+For wind speed, Their graph look very similar.
+For dew.point, there are some outline for NE,SE,SW.
+
+# 4.
+```{r}
+average_met%>%
+filter(!(region %in% NA)) %>%
+  ggplot(mapping = aes(x=dew.point, y=wind.sp, color=region))+geom_jitter() + stat_smooth(method=lm)
+```
+For SW and NW, their linear regression lines look more similar. For NE and SE,  their linear regression lines look not similar. The SE linear regression lines looks more association between dew point and wind speed by region.
+
+# 5.
+```{r}
+average_met$elevation_category<- ifelse(average_met$elev> 252, "high", "low")
+
+average_met%>%
+filter(!(region %in% NA)) %>%
+  ggplot()+geom_bar(mapping=aes(x=elevation_category,fill=region), position = "dodge")+scale_fill_brewer(palette = "PuOr")+labs(title="The weather stations by elevation category colored by region", x="elevation category", y= "frequency")+theme_bw()
+```
+For high, we can see that the NE have more number. For low, the SE have more number.
+
+6.
+```{r}
+average_met%>%
+filter(!(region %in% NA)) %>%
+  ggplot(mapping=aes(x=region, y=wind.sp)) +
+  stat_summary(fun.data="mean_sdl", geom="errorbar") +stat_summary(fun.data="mean_sdl")
+
+average_met%>%
+filter(!(region %in% NA)) %>%
+  ggplot(mapping=aes(x=region, y=dew.point)) +stat_summary(fun.data="mean_sdl", geom="errorbar")+stat_summary(fun.data="mean_sdl")
+```
+
+
+
+# 7.
+```{r}
+temp.pal <- colorNumeric(c('red','green','yellow'),domain=average_met$rh)
+
+top10<-average_met[rank(-rh) <= 10]
+
+leaflet(top10) %>%
+  addProviderTiles('CartoDB.Positron') %>%
+  addCircles(lat = ~lat, lng=~lon,label = ~paste0(round(rh,2), ' rh'), color = ~ temp.pal(rh),opacity = 1, fillOpacity = 1, radius = 500) %>%
+  addLegend('bottomleft', pal=temp.pal, values=average_met$rh, title='Temperature, C', opacity=1)
+```
+
+It look very less number from the leaflet.
+
+# 8. 
+examine the lon by region
+```{r}
+average_met%>%
+  filter(!(region %in% NA)) %>%
+ggplot()+geom_violin(mapping = aes(y=lon, x=1)) +facet_wrap(~region, nrow=3)
+```
